@@ -7,7 +7,7 @@ export const storyData = {
                 {
                     id: "corrupted",
                     name: "Corrupted",
-                    levelKey: "milestone", // Using milestone as corrupted tutorial
+                    levelKey: "milestone",
                     x: 200, y: 360,
                     unlocked: true,
                     next: ["chronos", "milkyways", "logicgatekeeper"]
@@ -50,13 +50,11 @@ export const storyData = {
     ],
     cutscenes: {
         "intro": [
-            { text: "In a world of shapes...", duration: 2000 },
-            { text: "The music was everything.", duration: 2000 },
-            { text: "Until the corruption arrived.", color: "#ff007f", duration: 3000 }
-        ],
-        "post_tutorial": [
-            { text: "The tutorial is over.", duration: 2000 },
-            { text: "Now the real challenge begins.", duration: 2000 }
+            { time: 0, action: 'peace', duration: 3000 }, // Show Tree of Life, Player jumping
+            { time: 3000, action: 'arrival', duration: 2000 }, // Boss enters from right
+            { time: 5000, action: 'impact', duration: 1000 }, // Flash + Tree turns pink
+            { time: 6000, action: 'shatter', duration: 2000 }, // Tree breaks
+            { time: 8000, action: 'finish', duration: 1000 }
         ]
     }
 };

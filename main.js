@@ -81,22 +81,98 @@ function enterCutscene(key, onComplete) {
     gameState = GameState.CUTSCENE;
     cutsceneLayer.classList.add('active');
     const sequence = storyData.cutscenes[key];
-    let index = 0;
+    let startTime = performance.now();
 
-    function next() {
-        if (index >= sequence.length) {
+    function update() {
+        if (gameState !== GameState.CUTSCENE) return;
+        const elapsed = performance.now() - startTime;
+        
+        // Find current step
+        const step = [...sequence].reverse().find(s => elapsed >= s.time);
+        if (elapsed > sequence[sequence.length-1].time + sequence[sequence.length-1].duration) {
             cutsceneLayer.classList.remove('active');
             if (onComplete) onComplete();
             return;
         }
-        const item = sequence[index];
-        dialogueText.innerText = item.text;
-        dialogueText.style.color = item.color || '#fff';
-        index++;
-        setTimeout(next, item.duration);
+
+        renderVisualCutscene(step, elapsed);
+        requestAnimationFrame(update);
     }
-    next();
+    update();
 }
+
+function renderVisualCutscene(step, elapsed) {
+    ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    const centerX = GAME_WIDTH / 2;
+    const centerY = GAME_HEIGHT / 2;
+
+    if (!step) return;
+
+    // Draw Tree of Life
+    const treeColor = (step.action === 'shatter' || (step.action === 'impact' && (elapsed % 200 > 100))) ? '#ff007f' : '#fff';
+    ctx.save();
+    ctx.translate(centerX, centerY - 50);
+    
+    // Triangle
+    ctx.beginPath();
+    ctx.moveTo(0, -100);
+    ctx.lineTo(-80, 50);
+    ctx.lineTo(80, 50);
+    ctx.closePath();
+    ctx.fillStyle = treeColor;
+    ctx.fill();
+
+    // Circles inside
+    ctx.fillStyle = '#000';
+    [-30, 0, 30].forEach((x, i) => {
+        ctx.beginPath();
+        ctx.arc(x, 10 + i*10, 10, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    ctx.restore();
+
+    // Draw Player
+    if (step.action === 'peace' || step.action === 'arrival') {
+        const px = centerX - 150 + Math.sin(elapsed / 200) * 50;
+        const py = centerY + 50 + Math.abs(Math.sin(elapsed / 150)) * -30;
+        ctx.fillStyle = '#00f2ff';
+        ctx.fillRect(px - 10, py - 10, 20, 20);
+    }
+
+    // Draw Boss
+    if (step.action === 'arrival' || step.action === 'impact' || step.action === 'shatter') {
+        let bx = GAME_WIDTH + 200;
+        if (step.action === 'arrival') {
+            const stepElapsed = elapsed - step.time;
+            bx = GAME_WIDTH - (stepElapsed / step.duration) * (GAME_WIDTH / 2 + 100);
+        } else {
+            bx = centerX + 100;
+        }
+
+        ctx.save();
+        ctx.translate(bx, centerY - 50);
+        ctx.rotate(elapsed / 500);
+        
+        // Spiky Circle
+        ctx.fillStyle = '#ff007f';
+        ctx.beginPath();
+        for (let i = 0; i < 12; i++) {
+            const angle = (i / 12) * Math.PI * 2;
+            const r = i % 2 === 0 ? 60 : 40;
+            ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // Impact Flash
+    if (step.action === 'impact') {
+        ctx.fillStyle = `rgba(255, 0, 127, ${Math.random() * 0.5})`;
+        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    }
+}
+
 
 
 // Game state
