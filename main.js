@@ -13,8 +13,48 @@ const PLAYER_SIZE = 20;
 const DASH_DISTANCE = 150;
 const DASH_COOLDOWN = 500;
 const DASH_DURATION = 150;
-const INVINCIBLE_DURATION = 1000;
+const INVINCIBLE_DURATION = 1200;
 const MAX_HEALTH = 100;
+
+// Effects
+let shakeIntensity = 0;
+let freezeFrame = 0;
+let playerParticles = [];
+
+function applyShake() {
+    if (shakeIntensity > 0) {
+        const sx = (Math.random() - 0.5) * shakeIntensity;
+        const sy = (Math.random() - 0.5) * shakeIntensity;
+        ctx.translate(sx, sy);
+        shakeIntensity *= 0.9;
+        if (shakeIntensity < 0.1) shakeIntensity = 0;
+    }
+}
+
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 15;
+        this.vy = (Math.random() - 0.5) * 15;
+        this.size = Math.random() * 8 + 4;
+        this.color = color;
+        this.life = 1.0;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vx *= 0.95;
+        this.vy *= 0.95;
+        this.life -= 0.02;
+    }
+    draw() {
+        ctx.fillStyle = this.color;
+        ctx.globalAlpha = this.life;
+        ctx.fillRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
+        ctx.globalAlpha = 1.0;
+    }
+}
 
 // Game UI Elements
 const startScreen = document.getElementById('start-screen');
@@ -112,31 +152,44 @@ function renderVisualCutscene(step, elapsed) {
     const treeColor = (step.action === 'shatter' || (step.action === 'impact' && (elapsed % 200 > 100))) ? '#ff007f' : '#fff';
     ctx.save();
     ctx.translate(centerX, centerY - 50);
+    ctx.shadowBlur = 30;
+    ctx.shadowColor = treeColor;
     
     // Triangle
     ctx.beginPath();
-    ctx.moveTo(0, -100);
-    ctx.lineTo(-80, 50);
-    ctx.lineTo(80, 50);
+    ctx.moveTo(0, -120);
+    ctx.lineTo(-100, 60);
+    ctx.lineTo(100, 60);
     ctx.closePath();
     ctx.fillStyle = treeColor;
     ctx.fill();
 
+    // Pulse effect
+    const pulse = Math.sin(elapsed / 300) * 10;
+    ctx.beginPath();
+    ctx.arc(0, -10, 40 + pulse, 0, Math.PI * 2);
+    ctx.strokeStyle = treeColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
     // Circles inside
     ctx.fillStyle = '#000';
-    [-30, 0, 30].forEach((x, i) => {
+    [-40, 0, 40].forEach((x, i) => {
         ctx.beginPath();
-        ctx.arc(x, 10 + i*10, 10, 0, Math.PI * 2);
+        ctx.arc(x, 20 + i*5, 12, 0, Math.PI * 2);
         ctx.fill();
     });
     ctx.restore();
 
     // Draw Player
     if (step.action === 'peace' || step.action === 'arrival') {
-        const px = centerX - 150 + Math.sin(elapsed / 200) * 50;
-        const py = centerY + 50 + Math.abs(Math.sin(elapsed / 150)) * -30;
+        const px = centerX - 150 + Math.sin(elapsed / 200) * 100;
+        const py = centerY + 100 + Math.abs(Math.sin(elapsed / 150)) * -60;
         ctx.fillStyle = '#00f2ff';
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = '#00f2ff';
         ctx.fillRect(px - 10, py - 10, 20, 20);
+        ctx.shadowBlur = 0;
     }
 
     // Draw Boss
@@ -151,27 +204,37 @@ function renderVisualCutscene(step, elapsed) {
 
         ctx.save();
         ctx.translate(bx, centerY - 50);
-        ctx.rotate(elapsed / 500);
+        ctx.rotate(elapsed / 300);
         
         // Spiky Circle
         ctx.fillStyle = '#ff007f';
+        ctx.shadowBlur = 40;
+        ctx.shadowColor = '#ff007f';
         ctx.beginPath();
-        for (let i = 0; i < 12; i++) {
-            const angle = (i / 12) * Math.PI * 2;
-            const r = i % 2 === 0 ? 60 : 40;
+        for (let i = 0; i < 24; i++) {
+            const angle = (i / 24) * Math.PI * 2;
+            const r = i % 2 === 0 ? 80 : 50;
             ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
         }
         ctx.closePath();
+        ctx.fill();
+
+        // Eye
+        ctx.rotate(-elapsed / 300);
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(0, 0, 20, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
     }
 
     // Impact Flash
     if (step.action === 'impact') {
-        ctx.fillStyle = `rgba(255, 0, 127, ${Math.random() * 0.5})`;
+        ctx.fillStyle = `rgba(255, 0, 127, ${Math.random() * 0.8})`;
         ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
     }
 }
+
 
 
 
@@ -254,8 +317,8 @@ class MapManager {
         mapCtx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
         
         // Draw connections
-        mapCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        mapCtx.lineWidth = 2;
+        mapCtx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        mapCtx.lineWidth = 3;
         for (let node of this.nodes) {
             if (node.next) {
                 node.next.forEach(nextId => {
@@ -273,26 +336,28 @@ class MapManager {
         // Draw nodes
         for (let node of this.nodes) {
             const isUnlocked = progress.unlockedNodes.includes(node.id);
-            mapCtx.fillStyle = isUnlocked ? '#fff' : '#333';
-            mapCtx.shadowBlur = isUnlocked ? 15 : 0;
+            mapCtx.fillStyle = isUnlocked ? '#fff' : '#222';
+            mapCtx.shadowBlur = isUnlocked ? 20 : 0;
             mapCtx.shadowColor = '#fff';
             
             mapCtx.beginPath();
-            mapCtx.arc(node.x, node.y, 15, 0, Math.PI * 2);
+            mapCtx.arc(node.x, node.y, 18, 0, Math.PI * 2);
             mapCtx.fill();
             mapCtx.shadowBlur = 0;
 
             if (isUnlocked) {
-                mapCtx.font = '14px Outfit';
-                mapCtx.fillText(node.name, node.x - 40, node.y + 30);
+                mapCtx.fillStyle = '#fff';
+                mapCtx.font = 'bold 16px Outfit';
+                mapCtx.textAlign = 'center';
+                mapCtx.fillText(node.name, node.x, node.y + 45);
             }
         }
 
         // Draw player
         mapCtx.fillStyle = '#00f2ff';
-        mapCtx.shadowBlur = 10;
+        mapCtx.shadowBlur = 20;
         mapCtx.shadowColor = '#00f2ff';
-        mapCtx.fillRect(this.player.x - 10, this.player.y - 10, 20, 20);
+        mapCtx.fillRect(this.player.x - 12, this.player.y - 12, 24, 24);
         mapCtx.shadowBlur = 0;
     }
 }
@@ -329,64 +394,93 @@ class Obstacle {
     constructor(config) {
         this.config = config;
         this.startTime = config.time * 1000;
+        this.telegraphDuration = config.warning || 500;
         this.active = false;
         this.dead = false;
         this.spawnedAt = 0;
     }
 
     update(currentTime, dt) {
-        if (!this.active && currentTime >= this.startTime) {
+        if (!this.active && currentTime >= this.startTime - this.telegraphDuration) {
             this.active = true;
             this.spawnedAt = currentTime;
         }
     }
 
-    draw() {}
-    checkCollision(px, py) { return false; }
+    draw(currentTime) {
+        const elapsed = currentTime - this.spawnedAt;
+        if (elapsed < this.telegraphDuration) {
+            this.drawTelegraph(elapsed);
+        } else {
+            this.drawActual(elapsed - this.telegraphDuration);
+        }
+    }
+
+    drawTelegraph(elapsed) {}
+    drawActual(elapsed) {}
+    checkCollision(px, py, currentTime) { return false; }
 }
 
 class PulseCircle extends Obstacle {
-    draw(currentTime) {
-        const elapsed = currentTime - this.spawnedAt;
+    drawTelegraph(elapsed) {
+        const progress = elapsed / this.telegraphDuration;
+        ctx.beginPath();
+        ctx.arc(this.config.x, this.config.y, this.config.targetSize, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 0, 0, ${progress * 0.3})`;
+        ctx.setLineDash([5, 5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    drawActual(elapsed) {
         const progress = Math.min(elapsed / this.config.duration, 1);
         const currentSize = this.config.targetSize * progress;
         
         ctx.beginPath();
         ctx.arc(this.config.x, this.config.y, currentSize, 0, Math.PI * 2);
-        ctx.fillStyle = progress > 0.8 ? '#ff007f' : 'rgba(255, 0, 127, 0.3)';
+        ctx.fillStyle = progress > 0.8 ? '#ff007f' : 'rgba(255, 0, 127, 0.4)';
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = '#ff007f';
         ctx.fill();
+        ctx.shadowBlur = 0;
         
         if (progress >= 1) this.dead = true;
     }
 
     checkCollision(px, py, currentTime) {
         const elapsed = currentTime - this.spawnedAt;
-        if (elapsed < this.config.duration * 0.8) return false;
+        if (elapsed < this.telegraphDuration + this.config.duration * 0.8) return false;
         
-        const currentSize = this.config.targetSize;
         const dx = px - this.config.x;
         const dy = py - this.config.y;
-        return Math.sqrt(dx * dx + dy * dy) < currentSize;
+        return Math.sqrt(dx * dx + dy * dy) < this.config.targetSize;
     }
 }
 
 class LaserV extends Obstacle {
-    draw(currentTime) {
-        const elapsed = currentTime - this.spawnedAt;
-        const isWarning = elapsed < this.config.warning;
-        
-        ctx.fillStyle = isWarning ? 'rgba(255, 0, 127, 0.2)' : '#ff007f';
+    drawTelegraph(elapsed) {
+        const progress = elapsed / this.telegraphDuration;
+        ctx.fillStyle = `rgba(255, 0, 0, ${progress * 0.2})`;
         ctx.fillRect(this.config.x - 10, 0, 20, GAME_HEIGHT);
+    }
+
+    drawActual(elapsed) {
+        ctx.fillStyle = '#ff007f';
+        ctx.shadowBlur = 25;
+        ctx.shadowColor = '#ff007f';
+        ctx.fillRect(this.config.x - 15, 0, 30, GAME_HEIGHT);
+        ctx.shadowBlur = 0;
         
-        if (elapsed >= this.config.warning + this.config.duration) this.dead = true;
+        if (elapsed >= this.config.duration) this.dead = true;
     }
 
     checkCollision(px, py, currentTime) {
         const elapsed = currentTime - this.spawnedAt;
-        if (elapsed < this.config.warning) return false;
+        if (elapsed < this.telegraphDuration) return false;
         return px > this.config.x - 20 && px < this.config.x + 20;
     }
 }
+
 
 class Burst extends Obstacle {
     constructor(config) {
@@ -395,18 +489,18 @@ class Burst extends Obstacle {
         this.projectiles = [];
     }
 
-    draw(currentTime) {
-        const elapsed = currentTime - this.spawnedAt;
-        
-        if (elapsed < this.config.warning) {
-            // Warning circle
-            ctx.strokeStyle = 'rgba(255, 0, 127, 0.5)';
-            ctx.setLineDash([5, 5]);
-            ctx.beginPath();
-            ctx.arc(this.config.x, this.config.y, 30, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        } else if (!this.fired) {
+    drawTelegraph(elapsed) {
+        const progress = elapsed / this.telegraphDuration;
+        ctx.strokeStyle = `rgba(255, 0, 0, ${progress * 0.5})`;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.arc(this.config.x, this.config.y, 40, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    drawActual(elapsed) {
+        if (!this.fired) {
             this.fired = true;
             for (let i = 0; i < this.config.count; i++) {
                 const angle = (i / this.config.count) * Math.PI * 2;
@@ -440,42 +534,71 @@ class Burst extends Obstacle {
 }
 
 class WallH extends Obstacle {
-    draw(currentTime) {
-        const elapsed = currentTime - this.spawnedAt;
-        this.y = this.config.y + (elapsed / 1000) * this.config.speed * 60;
-        
+    drawTelegraph(elapsed) {
+        const progress = elapsed / this.telegraphDuration;
+        ctx.fillStyle = `rgba(255, 0, 0, ${progress * 0.2})`;
+        ctx.fillRect(0, this.config.y, GAME_WIDTH, this.config.h);
+    }
+
+    drawActual(elapsed) {
+        const y = this.config.y + (elapsed / 1000) * this.config.speed * 60;
         ctx.fillStyle = '#ff007f';
-        ctx.fillRect(0, this.y, GAME_WIDTH, this.config.h);
-        
-        if (this.y > GAME_HEIGHT) this.dead = true;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#ff007f';
+        ctx.fillRect(0, y, GAME_WIDTH, this.config.h);
+        ctx.shadowBlur = 0;
+        if (y > GAME_HEIGHT) this.dead = true;
+        this.currentY = y;
     }
 
     checkCollision(px, py) {
-        return py > this.y && py < this.y + this.config.h;
+        return py > this.currentY && py < this.currentY + this.config.h;
     }
 }
 
 class BeamH extends Obstacle {
-    draw(currentTime) {
-        const elapsed = currentTime - this.spawnedAt;
-        const isWarning = elapsed < this.config.warning;
-        
-        ctx.fillStyle = isWarning ? 'rgba(255, 0, 127, 0.2)' : '#ff007f';
+    drawTelegraph(elapsed) {
+        const progress = elapsed / this.telegraphDuration;
+        ctx.fillStyle = `rgba(255, 0, 0, ${progress * 0.3})`;
         ctx.fillRect(0, this.config.y, GAME_WIDTH, this.config.h);
-        
-        if (elapsed >= this.config.warning + this.config.duration) this.dead = true;
+    }
+
+    drawActual(elapsed) {
+        ctx.fillStyle = '#ff007f';
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = '#ff007f';
+        ctx.fillRect(0, this.config.y, GAME_WIDTH, this.config.h);
+        ctx.shadowBlur = 0;
+        if (elapsed >= this.config.duration) this.dead = true;
     }
 
     checkCollision(px, py, currentTime) {
         const elapsed = currentTime - this.spawnedAt;
-        if (elapsed < this.config.warning) return false;
+        if (elapsed < this.telegraphDuration) return false;
         return py > this.config.y && py < this.config.y + this.config.h;
     }
 }
 
 class Hexagon extends Obstacle {
-    draw(currentTime) {
-        const elapsed = currentTime - this.spawnedAt;
+    drawTelegraph(elapsed) {
+        const progress = elapsed / this.telegraphDuration;
+        ctx.save();
+        ctx.translate(this.config.x, this.config.y);
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle = (i / 6) * Math.PI * 2;
+            const x = Math.cos(angle) * this.config.targetSize;
+            const y = Math.sin(angle) * this.config.targetSize;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = `rgba(255, 0, 0, ${progress * 0.3})`;
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    drawActual(elapsed) {
         const progress = Math.min(elapsed / this.config.duration, 1);
         const currentSize = this.config.targetSize * progress;
         const rotation = (elapsed / 1000) * Math.PI;
@@ -492,7 +615,9 @@ class Hexagon extends Obstacle {
             else ctx.lineTo(x, y);
         }
         ctx.closePath();
-        ctx.fillStyle = progress > 0.8 ? '#ff007f' : 'rgba(255, 0, 127, 0.3)';
+        ctx.fillStyle = progress > 0.8 ? '#ff007f' : 'rgba(255, 0, 127, 0.4)';
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = '#ff007f';
         ctx.fill();
         ctx.restore();
 
@@ -501,7 +626,7 @@ class Hexagon extends Obstacle {
 
     checkCollision(px, py, currentTime) {
         const elapsed = currentTime - this.spawnedAt;
-        if (elapsed < this.config.duration * 0.8) return false;
+        if (elapsed < this.telegraphDuration + this.config.duration * 0.8) return false;
         const dx = px - this.config.x;
         const dy = py - this.config.y;
         return Math.sqrt(dx * dx + dy * dy) < this.config.targetSize;
@@ -565,9 +690,22 @@ function handleCollisions() {
 }
 
 function takeDamage(amount) {
+    if (player.isInvincible) return;
+    
     health -= amount;
     player.isInvincible = true;
     player.invincibleUntil = Date.now() + INVINCIBLE_DURATION;
+    
+    // Screen Shake
+    shakeIntensity = 20;
+    
+    // Defragmentation Particles
+    for (let i = 0; i < 15; i++) {
+        playerParticles.push(new Particle(player.x, player.y, player.color));
+    }
+
+    // Freeze Frame (100ms)
+    freezeFrame = 6; // frames
     
     // Update UI
     healthBar.style.width = `${(health / MAX_HEALTH) * 100}%`;
@@ -650,22 +788,33 @@ async function playMusic() {
 }
 
 function loop(timestamp) {
+    if (freezeFrame > 0) {
+        freezeFrame--;
+        requestAnimationFrame(loop);
+        return;
+    }
+
     const dt = timestamp - lastTime;
     lastTime = timestamp;
 
     if (gameState === GameState.MAP) {
         mapManager.update();
-        mapManager.draw();
     }
 
     if (gameState === GameState.PLAYING) {
         levelTime += dt;
         updatePlayer(dt);
         
+        // Particles update
+        for (let i = playerParticles.length - 1; i >= 0; i--) {
+            playerParticles[i].update();
+            if (playerParticles[i].life <= 0) playerParticles.splice(i, 1);
+        }
+
         // Spawning
         for (let i = obstacles.length - 1; i >= 0; i--) {
             const obs = obstacles[i];
-            if (levelTime >= obs.startTime) {
+            if (levelTime >= obs.startTime - obs.telegraphDuration) {
                 activeObstacles.push(obs);
                 obstacles.splice(i, 1);
             }
@@ -697,10 +846,16 @@ function loop(timestamp) {
 }
 
 function draw() {
+    ctx.save();
     ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    applyShake();
+
+    if (gameState === GameState.MAP) {
+        mapManager.draw();
+    }
 
     // Background Grid
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
     ctx.lineWidth = 1;
     for (let x = 0; x < GAME_WIDTH; x += 50) {
         ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, GAME_HEIGHT); ctx.stroke();
@@ -709,19 +864,25 @@ function draw() {
         ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(GAME_WIDTH, y); ctx.stroke();
     }
 
-    if (gameState === 'PLAYING' || gameState === 'GAMEOVER') {
+    if (gameState === GameState.PLAYING || gameState === GameState.GAMEOVER) {
         // Draw Obstacles
         for (let obs of activeObstacles) {
             obs.draw(levelTime);
         }
 
+        // Draw Particles
+        playerParticles.forEach(p => p.draw());
+
         // Draw Player
-        ctx.fillStyle = player.isInvincible && Math.floor(Date.now() / 100) % 2 === 0 ? 'rgba(255,255,255,0.5)' : player.color;
-        if (player.isDashing) ctx.shadowBlur = 20;
-        ctx.shadowColor = player.color;
-        ctx.fillRect(player.x - PLAYER_SIZE / 2, player.y - PLAYER_SIZE / 2, PLAYER_SIZE, PLAYER_SIZE);
-        ctx.shadowBlur = 0;
+        if (playerParticles.length === 0 || player.isInvincible) {
+            ctx.fillStyle = player.isInvincible && Math.floor(Date.now() / 100) % 2 === 0 ? 'rgba(255,255,255,0.3)' : player.color;
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = player.color;
+            ctx.fillRect(player.x - PLAYER_SIZE / 2, player.y - PLAYER_SIZE / 2, PLAYER_SIZE, PLAYER_SIZE);
+            ctx.shadowBlur = 0;
+        }
     }
+    ctx.restore();
 }
 
 restartBtn.addEventListener('click', startLevel);
