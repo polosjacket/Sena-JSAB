@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sena JSAB - Just Shapes & Beats Clone</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="ui-layer">
+            <div id="start-screen" class="overlay active">
+                <h1 class="glow-text">SENA-JSAB</h1>
+                <p>Avoid the pink. Move to the beat.</p>
+                <div class="menu-actions">
+                    <button id="show-levels-btn" class="premium-btn">PLAY LEVELS</button>
+                    <button id="start-btn" class="premium-btn secondary">TUTORIAL</button>
+                </div>
+                <div class="controls-hint">
+                    WASD to Move | SPACE to Dash
+                </div>
+            </div>
+
+            <div id="level-selection" class="overlay">
+                <h2 class="glow-text small">SELECT TRACK</h2>
+                <div id="level-grid"></div>
+                <button id="back-to-menu" class="premium-btn secondary">BACK</button>
+            </div>
+
+            <div id="game-ui" class="overlay">
+                <div class="health-bar-container">
+                    <div id="health-bar"></div>
+                </div>
+                <div id="score">00:00</div>
+            </div>
+
+            <div id="game-over-screen" class="overlay">
+                <h2 class="glow-text red">CRASHED</h2>
+                <p>The beat goes on, but you don't.</p>
+                <button id="restart-btn" class="premium-btn">TRY AGAIN</button>
+            </div>
+        </div>
+    </div>
+    <script type="module" src="main.js"></script>
+</body>
+</html>
