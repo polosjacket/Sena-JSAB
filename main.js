@@ -737,9 +737,7 @@ function updatePlayer(dt) {
         player.x += player.dashDir.x * (DASH_DISTANCE / (DASH_DURATION / 16.6));
         player.y += player.dashDir.y * (DASH_DISTANCE / (DASH_DURATION / 16.6));
         player.dashTimer -= dt;
-        if (player.dashTimer <= 0) {
-            player.isDashing = false;
-        }
+        // Don't set isDashing to false here; let it happen at the end of the frame or in a way that collision still sees it.
     } else {
         player.x += dx * player.speed;
         player.y += dy * player.speed;
@@ -910,6 +908,11 @@ function loop(timestamp) {
         }
         
         handleCollisions();
+        
+        // Finalize dash state AFTER collision checks
+        if (player.dashTimer <= 0) {
+            player.isDashing = false;
+        }
         
         // Win condition: All obstacles done
         if (obstacles.length === 0 && activeObstacles.length === 0) {
