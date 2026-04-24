@@ -20,6 +20,8 @@ const MAX_HEALTH = 100;
 let shakeIntensity = 0;
 let freezeFrame = 0;
 let playerParticles = [];
+let introTextTimer = 0;
+let activeBoss = null;
 
 function applyShake() {
     if (shakeIntensity > 0) {
@@ -255,6 +257,7 @@ let player = {
     vy: 0,
     speed: 6,
     isDashing: false,
+    dashTimer: 0,
     lastDash: 0,
     dashDir: { x: 0, y: 0 },
     isInvincible: false,
@@ -386,6 +389,76 @@ class Projectile {
     draw() {
         ctx.fillStyle = '#ff007f';
         ctx.fillRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
+    }
+}
+
+class BossVisuals {
+    constructor() {
+        this.x = GAME_WIDTH / 2;
+        this.y = -200; // Start off-screen
+        this.targetY = 150;
+        this.rotation = 0;
+        this.eyeSize = 25;
+        this.isSlamming = false;
+        this.spikeCount = 16;
+    }
+
+    update(currentTime) {
+        // Smooth entry
+        if (this.y < this.targetY) {
+            this.y += (this.targetY - this.y) * 0.05;
+        }
+
+        // Hover animation
+        if (!this.isSlamming) {
+            this.y = this.targetY + Math.sin(currentTime / 500) * 20;
+        }
+
+        this.rotation += 0.02;
+    }
+
+    draw(currentTime) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.rotation);
+
+        // Body Glow
+        ctx.shadowBlur = 40;
+        ctx.shadowColor = '#ff007f';
+
+        // Spikes
+        ctx.fillStyle = '#ff007f';
+        ctx.beginPath();
+        for (let i = 0; i < this.spikeCount * 2; i++) {
+            const angle = (i / (this.spikeCount * 2)) * Math.PI * 2;
+            const r = i % 2 === 0 ? 100 : 70;
+            ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Ears/Triangles
+        for (let i = 0; i < 2; i++) {
+            ctx.save();
+            ctx.rotate(i === 0 ? -0.5 : 0.5);
+            ctx.beginPath();
+            ctx.moveTo(-30, -80);
+            ctx.lineTo(30, -80);
+            ctx.lineTo(0, -140);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // Center Eye
+        ctx.rotate(-this.rotation); // Keep eye still relative to rotation
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        const pulse = Math.sin(currentTime / 200) * 5;
+        ctx.arc(0, 0, this.eyeSize + pulse, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
     }
 }
 
@@ -635,7 +708,7 @@ class Hexagon extends Obstacle {
 
 // Game Logic
 function updatePlayer(dt) {
-    if (gameState !== 'PLAYING') return;
+    if (gameState !== GameState.PLAYING) return;
 
     // Movement
     let dx = 0;
@@ -652,17 +725,21 @@ function updatePlayer(dt) {
         dy /= len;
         
         // Dash check
-        if (keys['Space'] && Date.now() - player.lastDash > DASH_COOLDOWN) {
+        if (keys['Space'] && Date.now() - player.lastDash > DASH_COOLDOWN && !player.isDashing) {
             player.isDashing = true;
             player.lastDash = Date.now();
+            player.dashTimer = DASH_DURATION;
             player.dashDir = { x: dx, y: dy };
-            setTimeout(() => { player.isDashing = false; }, DASH_DURATION);
         }
     }
 
     if (player.isDashing) {
-        player.x += player.dashDir.x * (DASH_DISTANCE / (DASH_DURATION / 16));
-        player.y += player.dashDir.y * (DASH_DISTANCE / (DASH_DURATION / 16));
+        player.x += player.dashDir.x * (DASH_DISTANCE / (DASH_DURATION / 16.6));
+        player.y += player.dashDir.y * (DASH_DISTANCE / (DASH_DURATION / 16.6));
+        player.dashTimer -= dt;
+        if (player.dashTimer <= 0) {
+            player.isDashing = false;
+        }
     } else {
         player.x += dx * player.speed;
         player.y += dy * player.speed;
@@ -726,7 +803,9 @@ function startLevel() {
     gameState = GameState.PLAYING;
     health = MAX_HEALTH;
     levelTime = 0;
+    introTextTimer = 3000; // 3 seconds
     activeObstacles = [];
+    activeBoss = currentLevelData.isBoss ? new BossVisuals() : null;
     obstacles = currentLevelData.data.map(d => {
         if (d.type === 'pulse_circle') return new PulseCircle(d);
         if (d.type === 'laser_v') return new LaserV(d);
@@ -804,6 +883,8 @@ function loop(timestamp) {
     if (gameState === GameState.PLAYING) {
         levelTime += dt;
         updatePlayer(dt);
+        if (introTextTimer > 0) introTextTimer -= dt;
+        if (activeBoss) activeBoss.update(levelTime);
         
         // Particles update
         for (let i = playerParticles.length - 1; i >= 0; i--) {
@@ -865,9 +946,26 @@ function draw() {
     }
 
     if (gameState === GameState.PLAYING || gameState === GameState.GAMEOVER) {
+        // Draw Boss if exists
+        if (activeBoss) activeBoss.draw(levelTime);
+
         // Draw Obstacles
         for (let obs of activeObstacles) {
             obs.draw(levelTime);
+        }
+
+        // Draw Intro Text
+        if (introTextTimer > 0) {
+            ctx.save();
+            ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(introTextTimer / 1000, 1)})`;
+            ctx.font = 'bold 60px Outfit';
+            ctx.textAlign = 'center';
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = '#fff';
+            ctx.fillText(currentLevelData.name.toUpperCase(), GAME_WIDTH / 2, GAME_HEIGHT / 2 - 50);
+            ctx.font = '24px Outfit';
+            ctx.fillText(currentLevelData.author.toUpperCase(), GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20);
+            ctx.restore();
         }
 
         // Draw Particles
