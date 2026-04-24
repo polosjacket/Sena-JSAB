@@ -1,73 +1,105 @@
 import { levels } from './levels/index.js';
+import { storyData } from './levels/storyData.js';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+const mapCanvas = document.getElementById('mapCanvas');
+const mapCtx = mapCanvas.getContext('2d');
 
 // Game constants
 const GAME_WIDTH = 1280;
 const GAME_HEIGHT = 720;
 const PLAYER_SIZE = 20;
 const DASH_DISTANCE = 150;
-const DASH_COOLDOWN = 500; // ms
-const DASH_DURATION = 150; // ms
-const INVINCIBLE_DURATION = 1000; // ms after hit
+const DASH_COOLDOWN = 500;
+const DASH_DURATION = 150;
+const INVINCIBLE_DURATION = 1000;
 const MAX_HEALTH = 100;
 
 // Game UI Elements
 const startScreen = document.getElementById('start-screen');
-const levelSelection = document.getElementById('level-selection');
-const levelGrid = document.getElementById('level-grid');
+const worldMap = document.getElementById('world-map');
+const cutsceneLayer = document.getElementById('cutscene-layer');
+const dialogueText = document.getElementById('dialogue-text');
 const gameUI = document.getElementById('game-ui');
 const gameOverScreen = document.getElementById('game-over-screen');
-const startBtn = document.getElementById('start-btn');
-const showLevelsBtn = document.getElementById('show-levels-btn');
-const backToMenuBtn = document.getElementById('back-to-menu');
+const storyModeBtn = document.getElementById('story-mode-btn');
 const restartBtn = document.getElementById('restart-btn');
 const healthBar = document.getElementById('health-bar');
 const scoreDisplay = document.getElementById('score');
 
+const GameState = {
+    MENU: 'MENU',
+    MAP: 'MAP',
+    CUTSCENE: 'CUTSCENE',
+    PLAYING: 'PLAYING',
+    GAMEOVER: 'GAMEOVER'
+};
+
 // Current level info
 let currentLevelData = null;
+let currentStoryNode = null;
+let gameState = GameState.MENU;
 
-// Populate level grid
-function initLevelGrid() {
-    levelGrid.innerHTML = '';
-    levels.forEach((level, index) => {
-        const card = document.createElement('div');
-        card.className = 'level-card';
-        card.innerHTML = `
-            <div class="difficulty">${index === 0 ? 'TUTORIAL' : 'BOSS'}</div>
-            <h3>${level.name}</h3>
-            <p>${level.author}</p>
-        `;
-        card.onclick = () => {
-            currentLevelData = level;
-            startLevel();
-        };
-        levelGrid.appendChild(card);
-    });
+// Progress
+let progress = {
+    unlockedNodes: ['corrupted'],
+    completedNodes: [],
+    playerPos: { x: 200, y: 360 }
+};
+
+function saveProgress() {
+    localStorage.setItem('sena_jsab_progress', JSON.stringify(progress));
 }
 
-initLevelGrid();
+function loadProgress() {
+    const saved = localStorage.getItem('sena_jsab_progress');
+    if (saved) {
+        progress = JSON.parse(saved);
+    }
+}
+
+loadProgress();
 
 // Navigation
-showLevelsBtn.onclick = () => {
+storyModeBtn.onclick = () => {
     startScreen.classList.remove('active');
-    levelSelection.classList.add('active');
+    if (progress.completedNodes.length === 0) {
+        enterCutscene('intro', enterMap);
+    } else {
+        enterMap();
+    }
 };
 
-backToMenuBtn.onclick = () => {
-    levelSelection.classList.remove('active');
-    startScreen.classList.add('active');
-};
+function enterMap() {
+    gameState = GameState.MAP;
+    worldMap.classList.add('active');
+    resize();
+}
 
-startBtn.onclick = () => {
-    currentLevelData = levels[0]; // Tutorial
-    startLevel();
-};
+function enterCutscene(key, onComplete) {
+    gameState = GameState.CUTSCENE;
+    cutsceneLayer.classList.add('active');
+    const sequence = storyData.cutscenes[key];
+    let index = 0;
+
+    function next() {
+        if (index >= sequence.length) {
+            cutsceneLayer.classList.remove('active');
+            if (onComplete) onComplete();
+            return;
+        }
+        const item = sequence[index];
+        dialogueText.innerText = item.text;
+        dialogueText.style.color = item.color || '#fff';
+        index++;
+        setTimeout(next, item.duration);
+    }
+    next();
+}
+
 
 // Game state
-let gameState = 'START'; // START, PLAYING, GAMEOVER
 let score = 0;
 let health = MAX_HEALTH;
 let lastTime = 0;
@@ -110,6 +142,86 @@ resize();
 // Input listeners
 window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup', e => keys[e.code] = false);
+
+class MapManager {
+    constructor() {
+        this.nodes = storyData.chapters[0].nodes;
+        this.player = { ...progress.playerPos };
+    }
+
+    update() {
+        if (gameState !== GameState.MAP) return;
+        let dx = 0, dy = 0;
+        if (keys['KeyW'] || keys['ArrowUp']) dy -= 4;
+        if (keys['KeyS'] || keys['ArrowDown']) dy += 4;
+        if (keys['KeyA'] || keys['ArrowLeft']) dx -= 4;
+        if (keys['KeyD'] || keys['ArrowRight']) dx += 4;
+        
+        this.player.x += dx;
+        this.player.y += dy;
+        progress.playerPos = { ...this.player };
+
+        // Check for node proximity
+        for (let node of this.nodes) {
+            const dist = Math.sqrt((this.player.x - node.x)**2 + (this.player.y - node.y)**2);
+            if (dist < 30 && progress.unlockedNodes.includes(node.id)) {
+                currentStoryNode = node;
+                currentLevelData = levels.find(l => l.name.toLowerCase().includes(node.levelKey.toLowerCase()));
+                if (!currentLevelData) currentLevelData = levels[0]; // Fallback
+                startLevel();
+                break;
+            }
+        }
+    }
+
+    draw() {
+        mapCtx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        
+        // Draw connections
+        mapCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        mapCtx.lineWidth = 2;
+        for (let node of this.nodes) {
+            if (node.next) {
+                node.next.forEach(nextId => {
+                    const nextNode = this.nodes.find(n => n.id === nextId);
+                    if (nextNode) {
+                        mapCtx.beginPath();
+                        mapCtx.moveTo(node.x, node.y);
+                        mapCtx.lineTo(nextNode.x, nextNode.y);
+                        mapCtx.stroke();
+                    }
+                });
+            }
+        }
+
+        // Draw nodes
+        for (let node of this.nodes) {
+            const isUnlocked = progress.unlockedNodes.includes(node.id);
+            mapCtx.fillStyle = isUnlocked ? '#fff' : '#333';
+            mapCtx.shadowBlur = isUnlocked ? 15 : 0;
+            mapCtx.shadowColor = '#fff';
+            
+            mapCtx.beginPath();
+            mapCtx.arc(node.x, node.y, 15, 0, Math.PI * 2);
+            mapCtx.fill();
+            mapCtx.shadowBlur = 0;
+
+            if (isUnlocked) {
+                mapCtx.font = '14px Outfit';
+                mapCtx.fillText(node.name, node.x - 40, node.y + 30);
+            }
+        }
+
+        // Draw player
+        mapCtx.fillStyle = '#00f2ff';
+        mapCtx.shadowBlur = 10;
+        mapCtx.shadowColor = '#00f2ff';
+        mapCtx.fillRect(this.player.x - 10, this.player.y - 10, 20, 20);
+        mapCtx.shadowBlur = 0;
+    }
+}
+
+const mapManager = new MapManager();
 
 
 
@@ -390,14 +502,14 @@ function takeDamage(amount) {
 }
 
 function gameOver() {
-    gameState = 'GAMEOVER';
+    gameState = GameState.GAMEOVER;
     if (audioSource) audioSource.stop();
     gameUI.classList.remove('active');
     gameOverScreen.classList.add('active');
 }
 
 function startLevel() {
-    gameState = 'PLAYING';
+    gameState = GameState.PLAYING;
     health = MAX_HEALTH;
     levelTime = 0;
     activeObstacles = [];
@@ -413,11 +525,33 @@ function startLevel() {
     
     healthBar.style.width = '100%';
     startScreen.classList.remove('active');
-    levelSelection.classList.remove('active');
+    worldMap.classList.remove('active');
     gameOverScreen.classList.remove('active');
     gameUI.classList.add('active');
     
     playMusic();
+}
+
+function finishLevel() {
+    if (gameState !== GameState.PLAYING) return;
+    gameState = GameState.MAP;
+    gameUI.classList.remove('active');
+    worldMap.classList.add('active');
+    
+    if (audioSource) audioSource.stop();
+
+    // Unlock next nodes
+    if (currentStoryNode && currentStoryNode.next) {
+        currentStoryNode.next.forEach(id => {
+            if (!progress.unlockedNodes.includes(id)) {
+                progress.unlockedNodes.push(id);
+            }
+        });
+        if (!progress.completedNodes.includes(currentStoryNode.id)) {
+            progress.completedNodes.push(currentStoryNode.id);
+        }
+        saveProgress();
+    }
 }
 
 async function playMusic() {
@@ -443,7 +577,12 @@ function loop(timestamp) {
     const dt = timestamp - lastTime;
     lastTime = timestamp;
 
-    if (gameState === 'PLAYING') {
+    if (gameState === GameState.MAP) {
+        mapManager.update();
+        mapManager.draw();
+    }
+
+    if (gameState === GameState.PLAYING) {
         levelTime += dt;
         updatePlayer(dt);
         
@@ -466,6 +605,11 @@ function loop(timestamp) {
         
         handleCollisions();
         
+        // Win condition: All obstacles done
+        if (obstacles.length === 0 && activeObstacles.length === 0) {
+            finishLevel();
+        }
+
         // Score (Time)
         const sec = Math.floor(levelTime / 1000);
         const ms = Math.floor((levelTime % 1000) / 10);
