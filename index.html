@@ -18,18 +18,27 @@
                 <h1 class="glow-text">SENA-JSAB</h1>
                 <p>Avoid the pink. Move to the beat.</p>
                 <div class="menu-actions">
-                    <button id="show-levels-btn" class="premium-btn">PLAY LEVELS</button>
-                    <button id="start-btn" class="premium-btn secondary">TUTORIAL</button>
+                    <button id="story-mode-btn" class="premium-btn">STORY MODE</button>
                 </div>
                 <div class="controls-hint">
                     WASD to Move | SPACE to Dash
                 </div>
             </div>
 
-            <div id="level-selection" class="overlay">
-                <h2 class="glow-text small">SELECT TRACK</h2>
-                <div id="level-grid"></div>
-                <button id="back-to-menu" class="premium-btn secondary">BACK</button>
+            <div id="world-map" class="overlay">
+                <div class="map-header">
+                    <h2 id="chapter-title">THE BEGINNING</h2>
+                    <p>Navigate to a node to start</p>
+                </div>
+                <canvas id="mapCanvas"></canvas>
+            </div>
+
+            <div id="cutscene-layer" class="overlay">
+                <div class="cinematic-bars top"></div>
+                <div id="dialogue-container">
+                    <p id="dialogue-text"></p>
+                </div>
+                <div class="cinematic-bars bottom"></div>
             </div>
 
             <div id="game-ui" class="overlay">
