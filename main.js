@@ -79,7 +79,6 @@ const gameOverScreen = document.getElementById('game-over-screen');
 const storyModeBtn = document.getElementById('story-mode-btn');
 const restartBtn = document.getElementById('restart-btn');
 const healthBar = document.getElementById('health-bar');
-const scoreDisplay = document.getElementById('score');
 
 const GameState = {
     MENU: 'MENU',
@@ -117,11 +116,7 @@ loadProgress();
 // Navigation
 storyModeBtn.onclick = () => {
     startScreen.classList.remove('active');
-    if (progress.completedNodes.length === 0) {
-        enterCutscene('intro', enterMap);
-    } else {
-        enterMap();
-    }
+    enterMap();
 };
 
 function enterMap() {
@@ -959,11 +954,6 @@ function loop(timestamp) {
         if (obstacles.length === 0 && activeObstacles.length === 0) {
             finishLevel();
         }
-
-        // Timer/Score Display
-        const sec = Math.floor(levelTime / 1000);
-        const ms = Math.floor((levelTime % 1000) / 10);
-        scoreDisplay.innerText = `${sec.toString().padStart(2, '0')}:${ms.toString().padStart(2, '0')}`;
     }
 
     draw();

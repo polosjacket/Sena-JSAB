@@ -1,6 +1,6 @@
 # Just Shapes & Beats - Story Mode Clone
 
-A high-fidelity, web-based recreation of the iconic rhythm game "Just Shapes & Beats." This project faithfully implements the Story Mode progression, visual cinematics, and intense bullet-hell mechanics with a focus on premium graphics and smooth performance.
+A high-fidelity, web-based recreation of the iconic rhythm game "Just Shapes & Beats." This project faithfully implements the Story Mode progression and intense bullet-hell mechanics with a focus on premium graphics and smooth performance.
 
 ## 🚀 Key Features
 
@@ -8,7 +8,6 @@ A high-fidelity, web-based recreation of the iconic rhythm game "Just Shapes & B
 - **High-Fidelity Graphics**:
   - **Bloom Engine**: Real-time glow effects for all pink (hazards) and cyan (player) objects.
   - **Authentic Feedback**: Defragmentation (shatter) hit effects, screen shake, and impact freeze-frames.
-- **Cinematic System**: Scripted visual cutscenes recreating the "Tree of Life" corruption sequence.
 - **Precision Mechanics**:
   - **Dash Invincibility**: Perfectly frame-synced dash logic.
   - **Telegraphing**: Red warning indicators for all hazards showing where "the pink will be."

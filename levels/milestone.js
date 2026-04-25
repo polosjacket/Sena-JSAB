@@ -1,6 +1,6 @@
 export const milestone = {
-    name: "Milestone",
-    author: "Berzerk Studio",
+    name: "",
+    author: "",
     audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
     data: [
         { time: 1.0, type: 'pulse_circle', x: 640, y: 360, size: 0, targetSize: 200, duration: 1000 },

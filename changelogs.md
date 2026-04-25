@@ -2,6 +2,14 @@
 
 All notable changes to the Just Shapes & Beats clone implementation.
 
+## [v1.2.1] - Maintenance
+### Removed
+- **Intro Cutscene**: Removed the automatic intro cinematic when starting Story Mode.
+- **Level Timer**: Removed the timer/score display from the game UI for a cleaner experience.
+- **Credits**: Removed "Milestone" and "Berzerk Studio" text from level metadata.
+### Changed
+- **UI Layout**: Repositioned the health bar to the **top-left corner** to prevent it from blocking the center game view.
+
 ## [v1.2.0] - High-Fidelity & Gameplay Polish
 ### Added
 - **High-Fidelity Graphics Engine**: Implemented a global bloom/glow effect for all hazards and player objects.
