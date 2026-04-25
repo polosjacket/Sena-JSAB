@@ -6,23 +6,34 @@ const ctx = canvas.getContext('2d');
 const mapCanvas = document.getElementById('mapCanvas');
 const mapCtx = mapCanvas.getContext('2d');
 
-// Game constants
+// Game constants: Fixed resolution and timing settings for consistent gameplay
 const GAME_WIDTH = 1280;
 const GAME_HEIGHT = 720;
-const PLAYER_SIZE = 20;
-const DASH_DISTANCE = 150;
-const DASH_COOLDOWN = 500;
-const DASH_DURATION = 150;
-const INVINCIBLE_DURATION = 1200;
+const PLAYER_SIZE = 20;      // Size of the player's blue square
+const DASH_DISTANCE = 150;   // How far the player travels during a dash
+const DASH_COOLDOWN = 500;   // Wait time (ms) before another dash is allowed
+const DASH_DURATION = 150;   // Total duration (ms) of the dash animation
+const INVINCIBLE_DURATION = 1200; // Duration (ms) of invincibility after taking damage
 const MAX_HEALTH = 100;
 
-// Effects
+/** 
+ * Effects & Global State
+ * shakeIntensity: Current magnitude of screen jitter
+ * freezeFrame: Frames to pause for hit impact
+ * playerParticles: Array of particles for the "shatter" effect
+ * introTextTimer: Countdown for level title card visibility
+ * activeBoss: Reference to the current physical boss object
+ */
 let shakeIntensity = 0;
 let freezeFrame = 0;
 let playerParticles = [];
 let introTextTimer = 0;
 let activeBoss = null;
 
+/**
+ * Applies a random translation to the canvas context to simulate screen shake.
+ * Reduces intensity over time until it returns to zero.
+ */
 function applyShake() {
     if (shakeIntensity > 0) {
         const sx = (Math.random() - 0.5) * shakeIntensity;
@@ -463,16 +474,23 @@ class BossVisuals {
 }
 
 // Classes
+/**
+ * Base class for all level hazards.
+ * Implements a "Telegraph" system (red warning) before the "Actual" attack appears.
+ */
 class Obstacle {
     constructor(config) {
         this.config = config;
         this.startTime = config.time * 1000;
-        this.telegraphDuration = config.warning || 500;
+        this.telegraphDuration = config.warning || 500; // How long to show the red warning
         this.active = false;
         this.dead = false;
         this.spawnedAt = 0;
     }
 
+    /**
+     * Checks if it's time to start the telegraphing phase.
+     */
     update(currentTime, dt) {
         if (!this.active && currentTime >= this.startTime - this.telegraphDuration) {
             this.active = true;
@@ -480,6 +498,9 @@ class Obstacle {
         }
     }
 
+    /**
+     * Logic switcher: Draws the red telegraph if recently spawned, otherwise the actual pink hazard.
+     */
     draw(currentTime) {
         const elapsed = currentTime - this.spawnedAt;
         if (elapsed < this.telegraphDuration) {
@@ -489,6 +510,7 @@ class Obstacle {
         }
     }
 
+    // Abstract methods for children to implement
     drawTelegraph(elapsed) {}
     drawActual(elapsed) {}
     checkCollision(px, py, currentTime) { return false; }
@@ -707,10 +729,14 @@ class Hexagon extends Obstacle {
 }
 
 // Game Logic
+/**
+ * Main player update loop.
+ * Handles input detection, normalization of diagonal movement, and dash state.
+ */
 function updatePlayer(dt) {
     if (gameState !== GameState.PLAYING) return;
 
-    // Movement
+    // Movement vector calculation
     let dx = 0;
     let dy = 0;
     if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
@@ -718,13 +744,13 @@ function updatePlayer(dt) {
     if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
     if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
 
-    // Normalize
+    // Normalize diagonal movement speed
     if (dx !== 0 || dy !== 0) {
         const len = Math.sqrt(dx * dx + dy * dy);
         dx /= len;
         dy /= len;
         
-        // Dash check
+        // Trigger Dash: Only allowed if cooldown passed and not currently dashing
         if (keys['Space'] && Date.now() - player.lastDash > DASH_COOLDOWN && !player.isDashing) {
             player.isDashing = true;
             player.lastDash = Date.now();
@@ -733,37 +759,47 @@ function updatePlayer(dt) {
         }
     }
 
+    // Apply Dash or Standard Movement
     if (player.isDashing) {
+        // High-velocity movement during dash frame
         player.x += player.dashDir.x * (DASH_DISTANCE / (DASH_DURATION / 16.6));
         player.y += player.dashDir.y * (DASH_DISTANCE / (DASH_DURATION / 16.6));
         player.dashTimer -= dt;
-        // Don't set isDashing to false here; let it happen at the end of the frame or in a way that collision still sees it.
+        // isDashing reset is handled at the end of the frame in the main loop
     } else {
         player.x += dx * player.speed;
         player.y += dy * player.speed;
     }
 
-    // Bounds
+    // Screen Boundary Constraints
     player.x = Math.max(PLAYER_SIZE, Math.min(GAME_WIDTH - PLAYER_SIZE, player.x));
     player.y = Math.max(PLAYER_SIZE, Math.min(GAME_HEIGHT - PLAYER_SIZE, player.y));
 
-    // Invincibility
+    // Cleanup invincibility state after duration
     if (player.isInvincible && Date.now() > player.invincibleUntil) {
         player.isInvincible = false;
     }
 }
 
+/**
+ * Iterates through active hazards to check for collisions with the player.
+ * Player is invincible while dashing or in post-hit recovery.
+ */
 function handleCollisions() {
     if (player.isInvincible || player.isDashing) return;
 
     for (let obs of activeObstacles) {
         if (obs.checkCollision(player.x, player.y, levelTime)) {
             takeDamage(20);
-            break;
+            break; // Only take damage from one object per frame
         }
     }
 }
 
+/**
+ * Triggers damage logic: reduces health, starts invincibility, 
+ * creates shattering particles, and shakes the screen.
+ */
 function takeDamage(amount) {
     if (player.isInvincible) return;
     
@@ -771,18 +807,18 @@ function takeDamage(amount) {
     player.isInvincible = true;
     player.invincibleUntil = Date.now() + INVINCIBLE_DURATION;
     
-    // Screen Shake
+    // Impact Feedback
     shakeIntensity = 20;
     
-    // Defragmentation Particles
+    // Defragmentation: Create particles at player position
     for (let i = 0; i < 15; i++) {
         playerParticles.push(new Particle(player.x, player.y, player.color));
     }
 
-    // Freeze Frame (100ms)
-    freezeFrame = 6; // frames
+    // Freeze Frame: Brief pause to emphasize the hit
+    freezeFrame = 6; 
     
-    // Update UI
+    // UI Update
     healthBar.style.width = `${(health / MAX_HEALTH) * 100}%`;
     
     if (health <= 0) {
@@ -864,7 +900,12 @@ async function playMusic() {
     lastTime = performance.now();
 }
 
+/**
+ * Core RequestAnimationFrame loop.
+ * Handles state transitions, physics updates, and spawning logic.
+ */
 function loop(timestamp) {
+    // Impact Pause Handler
     if (freezeFrame > 0) {
         freezeFrame--;
         requestAnimationFrame(loop);
@@ -884,13 +925,13 @@ function loop(timestamp) {
         if (introTextTimer > 0) introTextTimer -= dt;
         if (activeBoss) activeBoss.update(levelTime);
         
-        // Particles update
+        // Update all particles (damage/shatter FX)
         for (let i = playerParticles.length - 1; i >= 0; i--) {
             playerParticles[i].update();
             if (playerParticles[i].life <= 0) playerParticles.splice(i, 1);
         }
 
-        // Spawning
+        // Spawning: Move obstacles from wait-list to active-list when their time comes
         for (let i = obstacles.length - 1; i >= 0; i--) {
             const obs = obstacles[i];
             if (levelTime >= obs.startTime - obs.telegraphDuration) {
@@ -899,7 +940,7 @@ function loop(timestamp) {
             }
         }
         
-        // Updating active
+        // Cleanup: Remove dead hazards
         for (let i = activeObstacles.length - 1; i >= 0; i--) {
             const obs = activeObstacles[i];
             if (obs.dead) {
@@ -909,17 +950,17 @@ function loop(timestamp) {
         
         handleCollisions();
         
-        // Finalize dash state AFTER collision checks
+        // Finalize dash state AFTER collision checks to prevent frame-end hit glitch
         if (player.dashTimer <= 0) {
             player.isDashing = false;
         }
         
-        // Win condition: All obstacles done
+        // Win condition: All hazards cleared
         if (obstacles.length === 0 && activeObstacles.length === 0) {
             finishLevel();
         }
 
-        // Score (Time)
+        // Timer/Score Display
         const sec = Math.floor(levelTime / 1000);
         const ms = Math.floor((levelTime % 1000) / 10);
         scoreDisplay.innerText = `${sec.toString().padStart(2, '0')}:${ms.toString().padStart(2, '0')}`;
